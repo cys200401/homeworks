@@ -29,7 +29,7 @@ async function proxyRequest(
   }
 
   const search = request.nextUrl.search || "";
-  const targetUrl = `${targetBaseUrl}/${path.join("/")}${search}`;
+  const targetUrl = `${targetBaseUrl}/api/${path.join("/")}${search}`;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("host");
   requestHeaders.delete("connection");
