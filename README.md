@@ -86,8 +86,8 @@ API_BASE_URL=https://your-railway-backend.example.com
 
 说明：
 
-- 仍兼容 `NEXT_PUBLIC_API_BASE_URL`
-- 生产环境更推荐只设置服务端变量 `API_BASE_URL`
+- 生产环境请只设置服务端变量 `API_BASE_URL`
+- 不要把 `NEXT_PUBLIC_API_BASE_URL` 或 `NEXT_PUBLIC_ADMIN_API_BASE_URL` 指到 Vercel 自己域名，否则 `/api/*` 代理可能递归请求自己
 - 这样浏览器不会再因为回退到 `127.0.0.1` 导致工作台页面报错
 
 ## 本地开发与验证
