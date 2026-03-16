@@ -30,5 +30,10 @@ describe("Home page", () => {
     expect(
       screen.getByLabelText(/2000年1月1日 AI论文日报（示例） 统计/i),
     ).toHaveTextContent(/重点\s*2\s*篇/i);
+    expect(
+      screen
+        .getAllByRole("link", { name: /打开工作台/i })
+        .map((item) => item.getAttribute("href")),
+    ).toContain("/u/research-lead");
   });
 });

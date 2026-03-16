@@ -6,19 +6,27 @@
 
 - FastAPI 骨架
 - PostgreSQL 连接
+- `arxiv_papers`
+- `users`
+- `user_delivery_profiles`
+- `user_theme_profiles`
+- `user_reports`
 - `pipeline_runs`
 - `run_errors`
 - `traffic_daily_stats`
 - 只读 admin API
 - `backend/scripts/run_stage.py` 运行记录包装层
 - `POST /api/traffic/pv` 最小 PV 写入接口
+- `backend/scripts/sync_arxiv_metadata.py` 每日元数据同步脚本
+- `backend/scripts/run_due_deliveries.py` 个性化日报生成脚本
 - 首页与日报详情页通过 `TrafficBeacon` 做最小 PV 上报
 
 当前不包括：
 
 - UV 去重
-- `papers` / `report_papers` / `page_events`
-- 把内容生产逻辑迁入后端
+- 全量 PDF/TXT 缓存
+- 多用户鉴权
+- 把深读流程对所有论文自动化
 
 ## 环境变量
 
@@ -136,6 +144,44 @@ python ../backend/scripts/run_stage.py --stage frontend_build -- npm run build
 
 - `report_write` 这个 stage 目前只预留给后续最小写回记录，不在本批收尾里继续扩展
 - 包装层放在 `backend/`，不修改 `.qwen/skills/daily-paper/` 下现有脚本
+
+## `sync_arxiv_metadata.py`
+
+这个脚本用于每天抓取最近几天的 arXiv AI 分类元数据，并 upsert 到 `arxiv_papers`。
+
+默认策略：
+
+- 抓取分类：`cs.AI,cs.CL,cs.CV,cs.IR,cs.LG,cs.RO`
+- 回看窗口：最近 2 天
+- 每分类上限：200
+- 保留期：180 天
+
+示例：
+
+```bash
+python backend/scripts/sync_arxiv_metadata.py
+```
+
+说明：
+
+- 当前只保存元数据，不保存全量 PDF/TXT
+- 对于 200 篇/天量级，保存半年元数据的存储成本通常远小于全文缓存
+- 如果需要更保守的磁盘策略，可调小 `--retention-days`
+
+## `run_due_deliveries.py`
+
+这个脚本会扫描 `user_delivery_profiles.next_run_at <= now()` 的用户，并生成/更新当天的 `user_reports`。
+
+示例：
+
+```bash
+python backend/scripts/run_due_deliveries.py
+```
+
+推荐的生产调度顺序：
+
+1. `sync_arxiv_metadata.py`
+2. `run_due_deliveries.py`
 
 ## `POST /api/traffic/pv`
 

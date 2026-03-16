@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.health import router as health_router
 from app.routes.traffic import router as traffic_router
+from app.routes.users import router as users_router
 
 
 def create_app() -> FastAPI:
@@ -23,13 +24,14 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["*"],
     )
 
     app.include_router(health_router)
     app.include_router(admin_router)
     app.include_router(traffic_router)
+    app.include_router(users_router)
 
     return app
 

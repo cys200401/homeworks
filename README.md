@@ -1,56 +1,80 @@
 # Daily Paper
 
-Daily Paper 是一个 AI 驱动的 arXiv 论文日报系统。当前仓库聚焦两条主线：
+Daily Paper 是一个面向多用户个性化投送的 arXiv AI 论文系统。当前仓库包含三条主线：
 
-- 内容生产：抓取论文、推荐、深读、生成日报数据文件
-- 前台发布：把日报数据渲染为可导出的静态网站
+- 元数据采集：每天抓取 arXiv AI 分类元数据并入库
+- 个性化投送：按每个用户的时区、发表时间窗、分类和主题生成日报
+- 前台发布：前端工作台按用户主题 token 动态渲染
 
 ## 当前版本状态
 
-- 当前基线为 `v0.1 internal`：前台静态日报与最小监控后台都已落地，当前目标是冻结一个可上线内测基线。
-- 前台公开范围是 `/` 与 `/daily/YYYY-MM-DD`；日报内容继续以 `frontend/data/daily/*.ts` 为真源。
-- `/admin` 已存在，但定位是内部监控入口；它通过 `NEXT_PUBLIC_ADMIN_API_BASE_URL` 读取后端 `/health`、`/api/admin/overview`、`/api/admin/pipeline-runs`、`/api/admin/errors`。
-- 当前数据库范围是 `pipeline_runs`、`run_errors`、`traffic_daily_stats`，用于最小运行记录与 PV 汇总，且允许 seed 数据与新增真实记录并存。
+- 前台除了保留 `/`、`/daily/YYYY-MM-DD` 示例页外，已新增个性化工作台 `/u/[handle]` 和设置页 `/u/[handle]/settings`。
+- 后端除了最小监控与 PV 统计外，已新增用户配置、主题配置、用户报告和 `arxiv_papers` 元数据表。
+- 当前推荐的生产链路是：先每日同步 arXiv 元数据，再按用户配置生成报告。元数据池只保存论文基础信息，不保存全量 PDF/TXT，因此存储压力远低于全文缓存。
 
-## 内测部署目标
+## 当前推荐部署链路
 
-- 这一步不扩功能、不改业务逻辑，只整理当前基线，让后续部署可控。
-- 部署目标是：前台公开访问，`/admin` 内部使用，后端只承载健康检查、只读 admin API 与最小 PV 写入。
-- 部署前只检查前端 `test/build`、后端 `/health`/admin API、PostgreSQL 初始化与真实记录、环境变量与 CORS。
-- 当前边界见 `docs/milestones/v0.1-internal.md` 与 `docs/checklists/pre-deploy-checklist.md`。
-
-当前阶段仍严格遵守 `.qwen/skills/daily-paper/SKILL.md` 的边界：推荐与深读由智能体完成，不新增 `recommend_papers.py`、`write_report.py` 一类脚本来接管核心流程。
+1. `backend/scripts/sync_arxiv_metadata.py` 每天抓最近几天的 AI 分类元数据并 upsert 到 PostgreSQL。
+2. `backend/scripts/run_due_deliveries.py` 扫描到期用户并生成当天个性化报告。
+3. `frontend/` 读取用户报告和主题 token，在 `/u/[handle]` 工作台渲染。
 
 ## 仓库结构
 
 ```text
 homeworks/
 ├── .qwen/skills/daily-paper/   # 抓取、下载 PDF、提取 TXT 的核心流程与约束
-├── backend/                    # Phase 2A 最小监控后台（FastAPI + PostgreSQL）
+├── backend/                    # FastAPI + PostgreSQL + 元数据同步/个性化投送脚本
 ├── docs/runbooks/              # 操作手册
-└── frontend/                   # Next.js 静态网站
+└── frontend/                   # Next.js 前端工作台
 ```
 
-## 当前真源
+## 当前真源与存储策略
 
-- 抓取结果真源：`.qwen/skills/daily-paper/papers.json`
-- 日报内容真源：`frontend/data/daily/*.ts`
-- 日报注册入口：`frontend/data/daily/index.ts`
-- 数据契约：`frontend/types/daily.ts`
+- 论文元数据真源：PostgreSQL `arxiv_papers`
+- 用户投送配置真源：PostgreSQL `user_delivery_profiles`
+- 用户主题真源：PostgreSQL `user_theme_profiles`
+- 用户日报真源：PostgreSQL `user_reports`
+
+说明：
+
+- `arxiv_papers` 只保存元数据：`arxiv_id`、标题、作者、摘要、分类、URL、发布时间
+- 默认不会为全量论文保存 PDF 和 TXT，因此每天抓取不会带来灾难性的磁盘占用
+- 只有需要进入深读流程的重点论文，才建议按需运行 `.qwen/skills/daily-paper/download_pdf.py` 与 `pdf_to_txt.py`
 
 ## 当前最短工作流
 
-1. 在 `.qwen/skills/daily-paper/` 运行 `crawler.py` 抓取论文元数据，并读取终端输出做推荐。
-2. 如需深读，运行 `download_pdf.py` 与 `pdf_to_txt.py` 补齐推荐论文全文。
-3. 将结果写入 `frontend/data/daily/YYYY-MM-DD.ts`。
-4. 更新 `frontend/data/daily/index.ts`。
-5. 在 `frontend/` 运行 `npm run build` 验证静态站可导出。
+1. 初始化数据库：`backend/sql/init.sql`、`backend/sql/seed_phase2a.sql`
+2. 每日同步元数据：
 
-完整操作手册见：
+```bash
+python backend/scripts/sync_arxiv_metadata.py
+```
 
-- `docs/runbooks/daily-report-production.md`
-- `docs/milestones/v0.1-internal.md`
-- `docs/checklists/pre-deploy-checklist.md`
+3. 生成到期用户日报：
+
+```bash
+python backend/scripts/run_due_deliveries.py
+```
+
+4. 启动后端与前端，访问：
+   - `/u/research-lead`
+   - `/u/vision-scout`
+
+5. 如需对少量重点论文做深读，再按需使用：
+
+```bash
+python .qwen/skills/daily-paper/download_pdf.py --workers 2
+python .qwen/skills/daily-paper/pdf_to_txt.py --workers 2
+```
+
+## GitHub CI
+
+- 已新增 GitHub Actions 工作流：`.github/workflows/ci.yml`
+- push 后会自动执行：
+  - 后端 `python -m unittest discover -s backend/tests`
+  - 前端 `npm test`
+  - 前端 `npm run lint`
+  - 前端 `npm run build`
 
 ## 本地开发与验证
 

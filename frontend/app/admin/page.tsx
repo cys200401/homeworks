@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { getApiBaseUrl } from "@/lib/api";
+
 type OverviewResponse = {
   health: {
     status: string;
@@ -44,8 +46,7 @@ type ErrorsResponse = {
   }>;
 };
 
-const ADMIN_API_BASE_URL =
-  process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? "http://127.0.0.1:8000";
+const ADMIN_API_BASE_URL = getApiBaseUrl();
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);

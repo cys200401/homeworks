@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 
+import { getApiBaseUrl } from "@/lib/api";
+
 type TrafficBeaconProps = {
   path: string;
-  pageType: "home" | "daily";
+  pageType: "home" | "daily" | "workspace" | "settings";
 };
 
-const ADMIN_API_BASE_URL =
-  process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getApiBaseUrl();
 
 declare global {
   interface Window {
@@ -52,7 +53,7 @@ export default function TrafficBeacon({
 
     sentKeys.add(requestKey);
 
-    void fetch(`${ADMIN_API_BASE_URL}/api/traffic/pv`, {
+    void fetch(`${API_BASE_URL}/api/traffic/pv`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

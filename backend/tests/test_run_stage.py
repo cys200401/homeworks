@@ -23,10 +23,12 @@ def _unused_get_connection():
 
 fake_app_db.get_connection = _unused_get_connection  # type: ignore[attr-defined]
 fake_app_models.PIPELINE_STAGES = (
+    "metadata_sync",
     "crawler",
     "download_pdf",
     "pdf_to_txt",
     "report_write",
+    "personalized_delivery",
     "frontend_build",
 )  # type: ignore[attr-defined]
 
