@@ -76,6 +76,20 @@ python .qwen/skills/daily-paper/pdf_to_txt.py --workers 2
   - 前端 `npm run lint`
   - 前端 `npm run build`
 
+## Vercel 环境变量
+
+前端现在通过 Next.js 同源 `/api/*` 代理转发到后端，推荐在 Vercel 配置：
+
+```bash
+API_BASE_URL=https://your-railway-backend.example.com
+```
+
+说明：
+
+- 仍兼容 `NEXT_PUBLIC_API_BASE_URL`
+- 生产环境更推荐只设置服务端变量 `API_BASE_URL`
+- 这样浏览器不会再因为回退到 `127.0.0.1` 导致工作台页面报错
+
 ## 本地开发与验证
 
 前端：

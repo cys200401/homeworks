@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import TrafficBeacon from "@/components/traffic/TrafficBeacon";
-import { getApiBaseUrl } from "@/lib/api";
+import { toApiPath } from "@/lib/api";
 import { formatDeliveryWindow, themeToStyle } from "@/lib/personalized-theme";
 import type {
   ThemeTokens,
@@ -14,7 +14,6 @@ import type {
   UserWorkspaceResponse,
 } from "@/types/personalized";
 
-const API_BASE_URL = getApiBaseUrl();
 const COMMON_AI_CATEGORIES = ["cs.AI", "cs.CL", "cs.CV", "cs.IR", "cs.LG", "cs.RO"];
 
 interface UserSettingsFormProps {
@@ -82,7 +81,7 @@ export default function UserSettingsForm({ handle }: UserSettingsFormProps) {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE_URL}/api/users/${handle}`);
+        const response = await fetch(toApiPath(`/users/${handle}`));
         if (!response.ok) {
           throw new Error(`profile request failed with ${response.status}`);
         }
@@ -155,7 +154,7 @@ export default function UserSettingsForm({ handle }: UserSettingsFormProps) {
       setError(null);
 
       const categories = buildCategoryList(selectedCategories, customCategoryText);
-      const response = await fetch(`${API_BASE_URL}/api/users/${handle}/preferences`, {
+      const response = await fetch(toApiPath(`/users/${handle}/preferences`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -196,7 +195,7 @@ export default function UserSettingsForm({ handle }: UserSettingsFormProps) {
       setStatusMessage(null);
       setError(null);
 
-      const response = await fetch(`${API_BASE_URL}/api/users/${handle}/theme`, {
+      const response = await fetch(toApiPath(`/users/${handle}/theme`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -238,12 +237,9 @@ export default function UserSettingsForm({ handle }: UserSettingsFormProps) {
       setStatusMessage(null);
       setError(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/users/${handle}/report/generate`,
-        {
-          method: "POST",
-        },
-      );
+      const response = await fetch(toApiPath(`/users/${handle}/report/generate`), {
+        method: "POST",
+      });
 
       if (!response.ok) {
         throw new Error(`generate report failed with ${response.status}`);

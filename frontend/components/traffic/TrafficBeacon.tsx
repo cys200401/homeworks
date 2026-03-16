@@ -2,14 +2,12 @@
 
 import { useEffect } from "react";
 
-import { getApiBaseUrl } from "@/lib/api";
+import { toApiPath } from "@/lib/api";
 
 type TrafficBeaconProps = {
   path: string;
   pageType: "home" | "daily" | "workspace" | "settings";
 };
-
-const API_BASE_URL = getApiBaseUrl();
 
 declare global {
   interface Window {
@@ -53,7 +51,7 @@ export default function TrafficBeacon({
 
     sentKeys.add(requestKey);
 
-    void fetch(`${API_BASE_URL}/api/traffic/pv`, {
+    void fetch(toApiPath("/traffic/pv"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

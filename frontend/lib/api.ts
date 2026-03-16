@@ -1,8 +1,23 @@
-const DEFAULT_API_BASE_URL =
+const SERVER_API_BASE_URL =
+  process.env.API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ??
-  "http://127.0.0.1:8000";
+  "";
 
 export function getApiBaseUrl() {
-  return DEFAULT_API_BASE_URL;
+  return "";
+}
+
+export function getServerApiBaseUrl() {
+  return SERVER_API_BASE_URL.replace(/\/+$/, "");
+}
+
+export function toApiPath(path: string) {
+  if (!path.startsWith("/")) {
+    return `/api/${path}`;
+  }
+  if (path.startsWith("/api/")) {
+    return path;
+  }
+  return `/api${path}`;
 }

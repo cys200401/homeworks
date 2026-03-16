@@ -8,15 +8,13 @@ import PaperHighlight from "@/components/PaperHighlight";
 import ReportHeader from "@/components/ReportHeader";
 import SectionDivider from "@/components/SectionDivider";
 import TrafficBeacon from "@/components/traffic/TrafficBeacon";
-import { getApiBaseUrl } from "@/lib/api";
+import { toApiPath } from "@/lib/api";
 import {
   formatDeliveryWindow,
   formatTimestamp,
   themeToStyle,
 } from "@/lib/personalized-theme";
 import type { UserWorkspaceResponse } from "@/types/personalized";
-
-const API_BASE_URL = getApiBaseUrl();
 
 interface UserWorkspaceProps {
   handle: string;
@@ -35,7 +33,7 @@ export default function UserWorkspace({ handle }: UserWorkspaceProps) {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_BASE_URL}/api/users/${handle}/workspace`);
+        const response = await fetch(toApiPath(`/users/${handle}/workspace`));
         if (!response.ok) {
           throw new Error(`workspace request failed with ${response.status}`);
         }

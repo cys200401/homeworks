@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { getApiBaseUrl } from "@/lib/api";
+import { toApiPath } from "@/lib/api";
 
 type OverviewResponse = {
   health: {
@@ -46,8 +46,6 @@ type ErrorsResponse = {
   }>;
 };
 
-const ADMIN_API_BASE_URL = getApiBaseUrl();
-
 export default function AdminPage() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRunsResponse["items"]>(
@@ -67,9 +65,9 @@ export default function AdminPage() {
 
         const [overviewResponse, runsResponse, errorsResponse] =
           await Promise.all([
-            fetch(`${ADMIN_API_BASE_URL}/api/admin/overview`),
-            fetch(`${ADMIN_API_BASE_URL}/api/admin/pipeline-runs`),
-            fetch(`${ADMIN_API_BASE_URL}/api/admin/errors`),
+            fetch(toApiPath("/admin/overview")),
+            fetch(toApiPath("/admin/pipeline-runs")),
+            fetch(toApiPath("/admin/errors")),
           ]);
 
         if (!overviewResponse.ok || !runsResponse.ok || !errorsResponse.ok) {
