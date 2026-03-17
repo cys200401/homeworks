@@ -5,21 +5,18 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-if str(WORKSPACE_ROOT) not in sys.path:
-    sys.path.insert(0, str(WORKSPACE_ROOT))
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from backend.scripts.run_stage import execute_stage
+from scripts.run_stage import execute_stage
 
 
 StageRunner = Callable[[str, list[str]], int]
 
 
 def build_metadata_command(args: argparse.Namespace) -> list[str]:
-    command = [sys.executable, str(WORKSPACE_ROOT / "backend" / "scripts" / "sync_arxiv_metadata.py")]
+    command = [sys.executable, str(BACKEND_ROOT / "scripts" / "sync_arxiv_metadata.py")]
 
     option_map = [
         ("metadata_categories", "--categories"),
@@ -45,7 +42,7 @@ def build_metadata_command(args: argparse.Namespace) -> list[str]:
 
 
 def build_delivery_command() -> list[str]:
-    return [sys.executable, str(WORKSPACE_ROOT / "backend" / "scripts" / "run_due_deliveries.py")]
+    return [sys.executable, str(BACKEND_ROOT / "scripts" / "run_due_deliveries.py")]
 
 
 def run_pipeline(args: argparse.Namespace, stage_runner: StageRunner | None = None) -> int:

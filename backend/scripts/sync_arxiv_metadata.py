@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
+try:
+    from app.arxiv_crawler import collect_records
+except ModuleNotFoundError:
+    from backend.app.arxiv_crawler import collect_records
 from app.db import get_connection
 
 DEFAULT_CATEGORIES = ("cs.AI", "cs.CL", "cs.CV", "cs.IR", "cs.LG", "cs.RO")
@@ -22,15 +25,34 @@ DEFAULT_EXPAND_STEP_DAYS = 2
 DEFAULT_MAX_EXPANSIONS = 1
 
 
-def load_crawler_module():
-    crawler_path = ROOT / ".qwen" / "skills" / "daily-paper" / "crawler.py"
-    spec = importlib.util.spec_from_file_location("daily_paper_crawler", crawler_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load crawler module from {crawler_path}")
+class LocalCrawlerModule:
+    @staticmethod
+    def collect_records(
+        start_date: str,
+        end_date: str,
+        limit: int,
+        category: str,
+        workers: int,
+        page_size: int,
+        timeout: int,
+        retries: int,
+        request_interval: float,
+    ) -> list[dict[str, Any]]:
+        return collect_records(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            category=category,
+            workers=workers,
+            page_size=page_size,
+            timeout=timeout,
+            retries=retries,
+            request_interval=request_interval,
+        )
 
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+
+def load_crawler_module():
+    return LocalCrawlerModule()
 
 
 def merge_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

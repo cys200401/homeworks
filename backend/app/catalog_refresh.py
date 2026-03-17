@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
 from app.personalization import normalize_categories, resolve_search_expansion
-from backend.scripts.sync_arxiv_metadata import (
+from scripts.sync_arxiv_metadata import (
     DEFAULT_LIMIT_PER_CATEGORY,
     DEFAULT_RETENTION_DAYS,
     collect_records_with_auto_expand,

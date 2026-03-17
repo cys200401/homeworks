@@ -5,7 +5,9 @@ import sys
 import types
 import unittest
 
-fake_run_stage = types.ModuleType("backend.scripts.run_stage")
+fake_scripts = types.ModuleType("scripts")
+fake_scripts.__path__ = []  # type: ignore[attr-defined]
+fake_run_stage = types.ModuleType("scripts.run_stage")
 
 
 def _unused_execute_stage(*_args, **_kwargs) -> int:
@@ -13,11 +15,13 @@ def _unused_execute_stage(*_args, **_kwargs) -> int:
 
 
 fake_run_stage.execute_stage = _unused_execute_stage  # type: ignore[attr-defined]
-sys.modules.setdefault("backend.scripts.run_stage", fake_run_stage)
+sys.modules.setdefault("scripts", fake_scripts)
+sys.modules.setdefault("scripts.run_stage", fake_run_stage)
 
 from backend.scripts.run_scheduled_pipeline import run_pipeline
 
-sys.modules.pop("backend.scripts.run_stage", None)
+sys.modules.pop("scripts.run_stage", None)
+sys.modules.pop("scripts", None)
 
 
 def make_args(**overrides) -> argparse.Namespace:
