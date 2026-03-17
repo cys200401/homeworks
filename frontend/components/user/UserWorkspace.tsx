@@ -101,6 +101,25 @@ export default function UserWorkspace({ handle }: UserWorkspaceProps) {
   const report = workspace.report;
   const theme = report?.theme ?? workspace.user.theme;
   const themeStyle = themeToStyle(theme);
+  const crawlMeta = report?.source.crawlMeta;
+  const effectiveLookbackDays =
+    typeof report?.source.effectiveLookbackDays === "number"
+      ? report.source.effectiveLookbackDays
+      : workspace.user.delivery.lookbackDays;
+  const searchExpanded = Boolean(report?.source.searchExpanded);
+  const crawlSummary = crawlMeta
+    ? [
+        crawlMeta.triggerMode === "due_delivery" ? "到点自动抓取" : "手动触发抓取",
+        typeof crawlMeta.uniqueRecords === "number"
+          ? `抓到 ${crawlMeta.uniqueRecords} 篇`
+          : null,
+        typeof crawlMeta.upserted === "number"
+          ? `入库 ${crawlMeta.upserted} 篇`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : "当前报告未附带抓取摘要。";
 
   return (
     <div className="user-workspace-shell">
@@ -167,6 +186,21 @@ export default function UserWorkspace({ handle }: UserWorkspaceProps) {
               回看 {workspace.user.delivery.lookbackDays} 天，按{" "}
               {workspace.user.delivery.categories.join(" / ")} 分类过滤。
             </p>
+          </div>
+          <div className="workspace-panel">
+            <h2 className="workspace-panel__title">最近自动抓取</h2>
+            <p className="workspace-panel__text">{crawlSummary}</p>
+            {report ? (
+              <p className="workspace-panel__text">
+                最近抓取时间 {formatTimestamp(crawlMeta?.triggeredAt ?? report.publishedAt)}
+                ，当前检索窗口为 {effectiveLookbackDays} 天
+                {searchExpanded ? "（本次触发了自动扩搜）" : ""}。
+              </p>
+            ) : (
+              <p className="workspace-panel__text">
+                当前还没有最新报告，系统尚未执行到点抓取。
+              </p>
+            )}
           </div>
         </section>
 

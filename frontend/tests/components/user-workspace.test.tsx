@@ -86,6 +86,14 @@ const workspaceResponse = {
     },
     source: {
       timezone: "America/Los_Angeles",
+      effectiveLookbackDays: 4,
+      searchExpanded: true,
+      crawlMeta: {
+        triggerMode: "due_delivery",
+        triggeredAt: "2026-03-15T15:00:00Z",
+        uniqueRecords: 8,
+        upserted: 8,
+      },
     },
     highlights: [
       {
@@ -146,6 +154,8 @@ describe("UserWorkspace", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(/当前主题 Prompt/i)).toBeInTheDocument();
+    expect(screen.getByText(/最近自动抓取/i)).toBeInTheDocument();
+    expect(screen.getByText(/到点自动抓取/i)).toBeInTheDocument();
     expect(screen.getByText(/趋势洞察/i)).toBeInTheDocument();
   });
 });

@@ -52,6 +52,12 @@ class PersonalizationTests(unittest.TestCase):
                 ),
             },
             now=datetime(2026, 3, 15, 0, 30, tzinfo=UTC),
+            crawl_meta={
+                "triggeredAt": "2026-03-15T00:30:00+00:00",
+                "triggerMode": "due_delivery",
+                "uniqueRecords": 1,
+                "upserted": 1,
+            },
             paper_catalog=[
                 {
                     "arxivId": "2603.15006v1",
@@ -71,6 +77,8 @@ class PersonalizationTests(unittest.TestCase):
         self.assertIn("视觉推理", report["tags"])
         self.assertGreaterEqual(len(report["highlights"]), 1)
         self.assertEqual(report["sourceMeta"]["paperSource"], "database")
+        self.assertEqual(report["sourceMeta"]["crawlMeta"]["triggerMode"], "due_delivery")
+        self.assertIn("自动抓取", report["summary"])
 
     def test_build_personalized_report_expands_lookback_when_primary_window_is_empty(self) -> None:
         report = build_personalized_report(

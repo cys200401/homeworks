@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.catalog_refresh import refresh_catalog_for_delivery
 from app.db import get_connection
 from app.personalization import (
     build_personalized_report,
@@ -58,6 +59,7 @@ def load_catalog_papers(
 def main() -> int:
     now = datetime.now(UTC)
     generated_count = 0
+    catalog_cache: dict[tuple[tuple[str, ...], int], dict[str, object]] = {}
 
     with get_connection() as connection:
         with connection.cursor() as cursor:
@@ -92,11 +94,33 @@ def main() -> int:
 
         for row in due_rows:
             theme_tokens = row["tokens_json"] or compile_theme_prompt(row["prompt_text"] or "")
-            paper_catalog = load_catalog_papers(
-                connection,
-                lookback_days=int(row["lookback_days"]),
-                reference_time=now,
-            )
+            categories = tuple(sorted(str(item) for item in (row["categories_json"] or [])))
+            cache_key = (categories, int(row["lookback_days"]))
+
+            cached = catalog_cache.get(cache_key)
+            if cached is None:
+                crawl_meta = refresh_catalog_for_delivery(
+                    categories=list(categories),
+                    lookback_days=int(row["lookback_days"]),
+                    reference_time=now,
+                    delivery_profile={
+                        "lookback_days": row["lookback_days"],
+                        "categories_json": row["categories_json"],
+                    },
+                )
+                paper_catalog = load_catalog_papers(
+                    connection,
+                    lookback_days=int(row["lookback_days"]),
+                    reference_time=now,
+                )
+                cached = {
+                    "crawl_meta": crawl_meta,
+                    "paper_catalog": paper_catalog,
+                }
+                catalog_cache[cache_key] = cached
+
+            crawl_meta = dict(cached["crawl_meta"])
+            paper_catalog = list(cached["paper_catalog"])
             report = build_personalized_report(
                 user={
                     "id": row["user_id"],
@@ -118,6 +142,7 @@ def main() -> int:
                 },
                 now=now,
                 paper_catalog=paper_catalog,
+                crawl_meta=crawl_meta,
             )
             next_run_at = compute_next_run_at(row["timezone"], row["delivery_local_time"], now=now)
 

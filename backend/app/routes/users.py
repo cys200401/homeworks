@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.catalog_refresh import refresh_catalog_for_delivery
 from app.db import get_connection
 from app.personalization import (
     build_personalized_report,
@@ -294,6 +295,12 @@ def _upsert_generated_report(
     now: datetime | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     generated_at = (now or datetime.now(UTC)).astimezone(UTC)
+    crawl_meta = refresh_catalog_for_delivery(
+        categories=normalize_categories(delivery.get("categories_json", ["cs.AI"])),
+        lookback_days=int(delivery.get("lookback_days", 1)),
+        reference_time=generated_at,
+        delivery_profile=delivery,
+    )
     paper_catalog = _load_catalog_papers(
         connection,
         lookback_days=int(delivery.get("lookback_days", 1)),
@@ -305,6 +312,7 @@ def _upsert_generated_report(
         theme_profile=theme,
         now=generated_at,
         paper_catalog=paper_catalog,
+        crawl_meta=crawl_meta,
     )
     next_run_at = compute_next_run_at(user["timezone"], delivery["delivery_local_time"], now=generated_at)
 

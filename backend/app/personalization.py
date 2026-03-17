@@ -602,6 +602,7 @@ def build_personalized_report(
     theme_profile: dict[str, Any] | None,
     now: datetime | None = None,
     paper_catalog: list[dict[str, Any]] | None = None,
+    crawl_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reference_time = (now or datetime.now(UTC)).astimezone(UTC)
     categories = normalize_categories(delivery_profile.get("categories_json", ["cs.AI"]))
@@ -645,14 +646,14 @@ def build_personalized_report(
 
     if candidates:
         summary = (
-            f"系统按 {timezone_name} 时区、{search_scope_text}，以及 "
+            f"系统在用户投送时间到达后自动抓取最新论文，并按 {timezone_name} 时区、{search_scope_text}，以及 "
             f"{window_start_hour:02d}:00-{window_end_hour:02d}:00 的论文发表时间窗口筛出 "
             f"{len(candidates)} 篇候选论文。当前优先关注 {', '.join(categories[:3])}，"
             "并将主题风格同步应用到个人工作台。"
         )
     else:
         summary = (
-            f"系统按 {timezone_name} 时区、{search_scope_text} 完成检索，但当前仍未找到匹配 "
+            f"系统在用户投送时间到达后自动抓取并按 {timezone_name} 时区、{search_scope_text} 完成检索，但当前仍未找到匹配 "
             f"{', '.join(categories[:3])} 的论文。建议继续扩大分类范围或等待下一轮同步。"
         )
     trends = (
@@ -687,6 +688,7 @@ def build_personalized_report(
             "maxSearchExpansions": max_search_expansions,
             "selectedPaperIds": [paper["arxivId"] for paper in candidates],
             "paperSource": "database" if paper_catalog is not None else "fallback",
+            "crawlMeta": crawl_meta or {},
         },
     }
 

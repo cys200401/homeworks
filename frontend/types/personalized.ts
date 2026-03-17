@@ -60,6 +60,55 @@ export interface UserThemeResponse {
   theme: ThemeTokens;
 }
 
+export interface CrawlSearchAttempt {
+  attempt?: number;
+  lookbackDays?: number;
+  startDate?: string;
+  endDate?: string;
+  rawRecords?: number;
+  strictMatches?: number;
+  relaxedMatches?: number;
+}
+
+export interface CrawlMeta {
+  triggeredAt?: string;
+  categories?: string[];
+  requestedLookbackDays?: number;
+  crawlLookbackDays?: number;
+  searchExpansionStepDays?: number;
+  maxSearchExpansions?: number;
+  rawRecords?: number;
+  uniqueRecords?: number;
+  upserted?: number;
+  deleted?: number;
+  searchAttempts?: CrawlSearchAttempt[];
+  finalWindow?: {
+    startDate: string;
+    endDate: string;
+  } | null;
+  triggerMode?: string;
+}
+
+export interface UserReportSource {
+  generatedAt?: string;
+  timezone?: string;
+  categories?: string[];
+  windowStartHour?: number;
+  windowEndHour?: number;
+  lookbackDays?: number;
+  effectiveLookbackDays?: number;
+  searchExpanded?: boolean;
+  searchAttempts?: CrawlSearchAttempt[];
+  matchedTimeWindow?: boolean;
+  searchMode?: string;
+  usedCategoryFallback?: boolean;
+  searchExpansionStepDays?: number;
+  maxSearchExpansions?: number;
+  selectedPaperIds?: string[];
+  paperSource?: string;
+  crawlMeta?: CrawlMeta;
+}
+
 export interface UserReport {
   date: string;
   title: string;
@@ -71,7 +120,7 @@ export interface UserReport {
   notables: PaperBrief[];
   publishedAt: string;
   theme: ThemeTokens;
-  source: Record<string, unknown>;
+  source: UserReportSource;
 }
 
 export interface UserWorkspaceResponse {
