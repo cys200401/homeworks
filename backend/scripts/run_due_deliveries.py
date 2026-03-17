@@ -14,7 +14,9 @@ from app.personalization import (
     build_personalized_report,
     catalog_row_to_paper,
     compile_theme_prompt,
+    compute_catalog_lookback_days,
     compute_next_run_at,
+    resolve_search_expansion,
 )
 
 
@@ -23,6 +25,13 @@ def load_catalog_papers(
     lookback_days: int,
     reference_time: datetime,
 ) -> list[dict[str, object]]:
+    expansion_step_days, max_search_expansions = resolve_search_expansion()
+    catalog_lookback_days = compute_catalog_lookback_days(
+        lookback_days,
+        expansion_step_days=expansion_step_days,
+        max_search_expansions=max_search_expansions,
+    )
+
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -39,7 +48,7 @@ def load_catalog_papers(
             order by published_at desc
             limit 500
             """,
-            (reference_time, max(lookback_days + 1, 2)),
+            (reference_time, catalog_lookback_days),
         )
         rows = cursor.fetchall()
 
@@ -108,7 +117,7 @@ def main() -> int:
                     "tokens_json": theme_tokens,
                 },
                 now=now,
-                paper_catalog=paper_catalog or None,
+                paper_catalog=paper_catalog,
             )
             next_run_at = compute_next_run_at(row["timezone"], row["delivery_local_time"], now=now)
 

@@ -17,6 +17,7 @@
 - 只读 admin API
 - `backend/scripts/run_stage.py` 运行记录包装层
 - `POST /api/traffic/pv` 最小 PV 写入接口
+- `backend/scripts/run_scheduled_pipeline.py` 统一定时调度脚本
 - `backend/scripts/sync_arxiv_metadata.py` 每日元数据同步脚本
 - `backend/scripts/run_due_deliveries.py` 个性化日报生成脚本
 - 首页与日报详情页通过 `TrafficBeacon` 做最小 PV 上报
@@ -155,6 +156,7 @@ python ../backend/scripts/run_stage.py --stage frontend_build -- npm run build
 - 回看窗口：最近 2 天
 - 每分类上限：200
 - 保留期：180 天
+- 若首轮窗口抓取结果为 0，会自动向前扩 2 天并重试 1 次
 
 示例：
 
@@ -167,6 +169,7 @@ python backend/scripts/sync_arxiv_metadata.py
 - 当前只保存元数据，不保存全量 PDF/TXT
 - 对于 200 篇/天量级，保存半年元数据的存储成本通常远小于全文缓存
 - 如果需要更保守的磁盘策略，可调小 `--retention-days`
+- 可通过 `--expand-step-days` 与 `--max-expansions` 调整空结果时的扩窗重试策略
 
 ## `run_due_deliveries.py`
 
@@ -182,6 +185,38 @@ python backend/scripts/run_due_deliveries.py
 
 1. `sync_arxiv_metadata.py`
 2. `run_due_deliveries.py`
+
+补充说明：
+
+- 若用户配置的原始回看日期范围内没有命中论文，报告生成会自动扩大日期范围后再筛一次
+- 扩搜后仍然优先保留用户分类过滤，不会回退到无关分类的 demo 论文
+
+## `run_scheduled_pipeline.py`
+
+这个脚本把元数据同步和个性化投送串成一条定时命令，适合直接挂到 Railway 的 cron/job。
+
+默认命令：
+
+```bash
+python backend/scripts/run_scheduled_pipeline.py
+```
+
+如果只想跑其中一个阶段：
+
+```bash
+python backend/scripts/run_scheduled_pipeline.py --skip-deliveries
+python backend/scripts/run_scheduled_pipeline.py --skip-sync
+```
+
+如果要给同步阶段传自定义日期窗口：
+
+```bash
+python backend/scripts/run_scheduled_pipeline.py \
+  --metadata-end-date 2026-03-15 \
+  --metadata-lookback-days 1 \
+  --metadata-expand-step-days 2 \
+  --metadata-max-expansions 1
+```
 
 ## `POST /api/traffic/pv`
 

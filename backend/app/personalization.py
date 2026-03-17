@@ -252,6 +252,9 @@ CATEGORY_LABELS = {
     "cs.RO": "机器人",
 }
 
+DEFAULT_SEARCH_EXPANSION_STEP_DAYS = 2
+DEFAULT_SEARCH_MAX_EXPANSIONS = 1
+
 
 def parse_utc_datetime(raw_value: str) -> datetime:
     return datetime.fromisoformat(raw_value.replace("Z", "+00:00")).astimezone(UTC)
@@ -264,6 +267,39 @@ def normalize_categories(raw_categories: Iterable[str]) -> list[str]:
         if cleaned:
             ordered[cleaned] = None
     return list(ordered.keys()) or ["cs.AI"]
+
+
+def resolve_search_expansion(delivery_profile: dict[str, Any] | None = None) -> tuple[int, int]:
+    profile = delivery_profile or {}
+    expansion_step_days = int(
+        profile.get("search_expansion_days", DEFAULT_SEARCH_EXPANSION_STEP_DAYS),
+    )
+    max_search_expansions = int(
+        profile.get("max_search_expansions", DEFAULT_SEARCH_MAX_EXPANSIONS),
+    )
+    return max(expansion_step_days, 1), max(max_search_expansions, 0)
+
+
+def compute_search_lookback_days(
+    lookback_days: int,
+    expansion_step_days: int = DEFAULT_SEARCH_EXPANSION_STEP_DAYS,
+    max_search_expansions: int = DEFAULT_SEARCH_MAX_EXPANSIONS,
+) -> list[int]:
+    base_lookback_days = max(int(lookback_days), 1)
+    step_days = max(int(expansion_step_days), 1)
+    expansions = max(int(max_search_expansions), 0)
+    return [base_lookback_days + (attempt * step_days) for attempt in range(expansions + 1)]
+
+
+def compute_catalog_lookback_days(
+    lookback_days: int,
+    expansion_step_days: int = DEFAULT_SEARCH_EXPANSION_STEP_DAYS,
+    max_search_expansions: int = DEFAULT_SEARCH_MAX_EXPANSIONS,
+) -> int:
+    return max(
+        max(compute_search_lookback_days(lookback_days, expansion_step_days, max_search_expansions)) + 1,
+        2,
+    )
 
 
 def get_timezone(timezone_name: str | None) -> ZoneInfo:
@@ -477,15 +513,20 @@ def _pick_candidates(
     lookback_days: int,
     reference_time: datetime,
     paper_catalog: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
+    expansion_step_days: int = DEFAULT_SEARCH_EXPANSION_STEP_DAYS,
+    max_search_expansions: int = DEFAULT_SEARCH_MAX_EXPANSIONS,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     selected_categories = set(categories)
     user_timezone = get_timezone(timezone_name)
     local_reference = reference_time.astimezone(user_timezone)
-    lookback_start = local_reference - timedelta(days=lookback_days)
     source_papers = paper_catalog if paper_catalog is not None else FALLBACK_PAPERS
+    search_windows = compute_search_lookback_days(
+        lookback_days,
+        expansion_step_days=expansion_step_days,
+        max_search_expansions=max_search_expansions,
+    )
 
-    candidates: list[dict[str, Any]] = []
-    fallback_candidates: list[dict[str, Any]] = []
+    matching_papers: list[tuple[dict[str, Any], datetime]] = []
 
     for raw_paper in source_papers:
         paper = _normalize_catalog_paper(raw_paper)
@@ -494,24 +535,65 @@ def _pick_candidates(
 
         published_utc = parse_utc_datetime(paper["publishedAt"])
         published_local = published_utc.astimezone(user_timezone)
+        matching_papers.append((paper, published_local))
 
-        if published_local >= lookback_start:
-            fallback_candidates.append(paper)
+    matching_papers.sort(key=lambda item: item[0]["publishedAt"], reverse=True)
+    search_attempts: list[dict[str, Any]] = []
+
+    for attempt, current_lookback_days in enumerate(search_windows, start=1):
+        lookback_start = local_reference - timedelta(days=current_lookback_days)
+        strict_candidates: list[dict[str, Any]] = []
+        relaxed_candidates: list[dict[str, Any]] = []
+
+        for paper, published_local in matching_papers:
+            if published_local < lookback_start:
+                continue
+
+            relaxed_candidates.append(paper)
             if hour_in_window(published_local.hour, window_start_hour, window_end_hour):
-                candidates.append(paper)
+                strict_candidates.append(paper)
 
-    candidates.sort(key=lambda item: item["publishedAt"], reverse=True)
-    fallback_candidates.sort(key=lambda item: item["publishedAt"], reverse=True)
+        search_attempts.append(
+            {
+                "attempt": attempt,
+                "lookbackDays": current_lookback_days,
+                "strictMatches": len(strict_candidates),
+                "relaxedMatches": len(relaxed_candidates),
+            }
+        )
 
-    if candidates:
-        return candidates
-    if fallback_candidates:
-        return fallback_candidates
-    return sorted(
-        [_normalize_catalog_paper(item) for item in source_papers],
-        key=lambda item: item["publishedAt"],
-        reverse=True,
-    )
+        if strict_candidates:
+            return strict_candidates, {
+                "requestedLookbackDays": lookback_days,
+                "effectiveLookbackDays": current_lookback_days,
+                "searchExpanded": current_lookback_days != lookback_days,
+                "searchAttempts": search_attempts,
+                "matchedTimeWindow": True,
+                "searchMode": "time_window",
+                "usedCategoryFallback": False,
+            }
+
+        if relaxed_candidates:
+            return relaxed_candidates, {
+                "requestedLookbackDays": lookback_days,
+                "effectiveLookbackDays": current_lookback_days,
+                "searchExpanded": current_lookback_days != lookback_days,
+                "searchAttempts": search_attempts,
+                "matchedTimeWindow": False,
+                "searchMode": "lookback_only",
+                "usedCategoryFallback": False,
+            }
+
+    category_fallback = [paper for paper, _published_local in matching_papers]
+    return category_fallback, {
+        "requestedLookbackDays": lookback_days,
+        "effectiveLookbackDays": search_windows[-1] if search_windows else lookback_days,
+        "searchExpanded": len(search_windows) > 1,
+        "searchAttempts": search_attempts,
+        "matchedTimeWindow": False,
+        "searchMode": "category_only" if category_fallback else "empty",
+        "usedCategoryFallback": bool(category_fallback),
+    }
 
 
 def build_personalized_report(
@@ -527,13 +609,14 @@ def build_personalized_report(
     window_start_hour = int(delivery_profile.get("window_start_hour", 0))
     window_end_hour = int(delivery_profile.get("window_end_hour", 24))
     lookback_days = int(delivery_profile.get("lookback_days", 1))
+    expansion_step_days, max_search_expansions = resolve_search_expansion(delivery_profile)
 
     theme_tokens = (
         deepcopy(theme_profile["tokens_json"])
         if theme_profile and theme_profile.get("tokens_json")
         else compile_theme_prompt(str(theme_profile.get("prompt_text", "")) if theme_profile else "")
     )
-    candidates = _pick_candidates(
+    candidates, search_meta = _pick_candidates(
         categories=categories,
         timezone_name=timezone_name,
         window_start_hour=window_start_hour,
@@ -541,6 +624,8 @@ def build_personalized_report(
         lookback_days=lookback_days,
         reference_time=reference_time,
         paper_catalog=paper_catalog,
+        expansion_step_days=expansion_step_days,
+        max_search_expansions=max_search_expansions,
     )
 
     highlights = [_to_highlight(paper) for paper in candidates[:2]]
@@ -550,12 +635,26 @@ def build_personalized_report(
 
     report_date = reference_time.astimezone(get_timezone(timezone_name)).date()
     display_name = str(user.get("display_name") or user.get("handle") or "用户")
-    summary = (
-        f"系统按 {timezone_name} 时区、{lookback_days} 天回看范围，以及 "
-        f"{window_start_hour:02d}:00-{window_end_hour:02d}:00 的论文发表时间窗口筛出 "
-        f"{len(candidates)} 篇候选论文。当前优先关注 {', '.join(categories[:3])}，"
-        "并将主题风格同步应用到个人工作台。"
-    )
+    effective_lookback_days = int(search_meta["effectiveLookbackDays"])
+    if search_meta["searchExpanded"]:
+        search_scope_text = (
+            f"原始 {lookback_days} 天范围未命中后，系统自动扩展到 {effective_lookback_days} 天完成二次搜寻"
+        )
+    else:
+        search_scope_text = f"{lookback_days} 天回看范围"
+
+    if candidates:
+        summary = (
+            f"系统按 {timezone_name} 时区、{search_scope_text}，以及 "
+            f"{window_start_hour:02d}:00-{window_end_hour:02d}:00 的论文发表时间窗口筛出 "
+            f"{len(candidates)} 篇候选论文。当前优先关注 {', '.join(categories[:3])}，"
+            "并将主题风格同步应用到个人工作台。"
+        )
+    else:
+        summary = (
+            f"系统按 {timezone_name} 时区、{search_scope_text} 完成检索，但当前仍未找到匹配 "
+            f"{', '.join(categories[:3])} 的论文。建议继续扩大分类范围或等待下一轮同步。"
+        )
     trends = (
         f"当前候选论文集中在 {', '.join(_category_tags(categories))}。"
         "整体信号显示，研究工作正在从单点模型效果，转向更强调系统协同、检索组织和部署效率。"
@@ -578,6 +677,14 @@ def build_personalized_report(
             "windowStartHour": window_start_hour,
             "windowEndHour": window_end_hour,
             "lookbackDays": lookback_days,
+            "effectiveLookbackDays": effective_lookback_days,
+            "searchExpanded": search_meta["searchExpanded"],
+            "searchAttempts": search_meta["searchAttempts"],
+            "matchedTimeWindow": search_meta["matchedTimeWindow"],
+            "searchMode": search_meta["searchMode"],
+            "usedCategoryFallback": search_meta["usedCategoryFallback"],
+            "searchExpansionStepDays": expansion_step_days,
+            "maxSearchExpansions": max_search_expansions,
             "selectedPaperIds": [paper["arxivId"] for paper in candidates],
             "paperSource": "database" if paper_catalog is not None else "fallback",
         },

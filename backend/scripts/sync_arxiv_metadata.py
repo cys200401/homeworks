@@ -18,6 +18,8 @@ DEFAULT_CATEGORIES = ("cs.AI", "cs.CL", "cs.CV", "cs.IR", "cs.LG", "cs.RO")
 DEFAULT_LIMIT_PER_CATEGORY = 200
 DEFAULT_LOOKBACK_DAYS = 2
 DEFAULT_RETENTION_DAYS = 180
+DEFAULT_EXPAND_STEP_DAYS = 2
+DEFAULT_MAX_EXPANSIONS = 1
 
 
 def load_crawler_module():
@@ -57,6 +59,70 @@ def merge_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         key=lambda item: item.get("published_at") or item.get("published", ""),
         reverse=True,
     )
+
+
+def collect_records_with_auto_expand(
+    crawler,
+    categories: list[str],
+    end_day: date,
+    limit_per_category: int,
+    lookback_days: int,
+    page_size: int,
+    timeout: int,
+    retries: int,
+    request_interval: float,
+    expand_step_days: int = DEFAULT_EXPAND_STEP_DAYS,
+    max_expansions: int = DEFAULT_MAX_EXPANSIONS,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    normalized_lookback_days = max(int(lookback_days), 1)
+    normalized_expand_step_days = max(int(expand_step_days), 1)
+    normalized_max_expansions = max(int(max_expansions), 0)
+    search_attempts: list[dict[str, Any]] = []
+
+    for attempt in range(normalized_max_expansions + 1):
+        current_lookback_days = normalized_lookback_days + (attempt * normalized_expand_step_days)
+        start_day = end_day - timedelta(days=max(current_lookback_days - 1, 0))
+        all_records: list[dict[str, Any]] = []
+
+        for category in categories:
+            print(
+                f"syncing category={category} window={start_day.isoformat()}..{end_day.isoformat()} "
+                f"limit={limit_per_category} attempt={attempt + 1}",
+                flush=True,
+            )
+            category_records = crawler.collect_records(
+                start_date=start_day.isoformat(),
+                end_date=end_day.isoformat(),
+                limit=limit_per_category,
+                category=category,
+                workers=1,
+                page_size=page_size,
+                timeout=timeout,
+                retries=retries,
+                request_interval=request_interval,
+            )
+            all_records.extend(category_records)
+
+        search_attempts.append(
+            {
+                "attempt": attempt + 1,
+                "lookbackDays": current_lookback_days,
+                "startDate": start_day.isoformat(),
+                "endDate": end_day.isoformat(),
+                "rawRecords": len(all_records),
+            }
+        )
+
+        if all_records or attempt == normalized_max_expansions:
+            return all_records, search_attempts
+
+        print(
+            "no arxiv records found for requested window; "
+            f"expanding search by {normalized_expand_step_days} days and retrying",
+            flush=True,
+        )
+
+    return [], search_attempts
 
 
 def persist_records(
@@ -176,6 +242,18 @@ def parse_args() -> argparse.Namespace:
         default=date.today().isoformat(),
         help="结束日期，格式 YYYY-MM-DD",
     )
+    parser.add_argument(
+        "--expand-step-days",
+        type=int,
+        default=DEFAULT_EXPAND_STEP_DAYS,
+        help="首轮无结果时，第二轮向前额外扩大的天数，默认 2 天",
+    )
+    parser.add_argument(
+        "--max-expansions",
+        type=int,
+        default=DEFAULT_MAX_EXPANSIONS,
+        help="首轮无结果后最多自动扩窗重试几次，默认 1 次",
+    )
     return parser.parse_args()
 
 
@@ -183,27 +261,22 @@ def main() -> int:
     args = parse_args()
     crawler = load_crawler_module()
     categories = [item.strip() for item in args.categories.split(",") if item.strip()]
+    if not categories:
+        raise SystemExit("No categories configured. Pass --categories with at least one arXiv category.")
     end_day = date.fromisoformat(args.end_date)
-    start_day = end_day - timedelta(days=max(args.lookback_days - 1, 0))
-
-    all_records: list[dict[str, Any]] = []
-    for category in categories:
-        print(
-            f"syncing category={category} window={start_day.isoformat()}..{end_day.isoformat()} limit={args.limit_per_category}",
-            flush=True,
-        )
-        category_records = crawler.collect_records(
-            start_date=start_day.isoformat(),
-            end_date=end_day.isoformat(),
-            limit=args.limit_per_category,
-            category=category,
-            workers=1,
-            page_size=args.page_size,
-            timeout=args.timeout,
-            retries=args.retries,
-            request_interval=args.request_interval,
-        )
-        all_records.extend(category_records)
+    all_records, search_attempts = collect_records_with_auto_expand(
+        crawler=crawler,
+        categories=categories,
+        end_day=end_day,
+        limit_per_category=args.limit_per_category,
+        lookback_days=args.lookback_days,
+        page_size=args.page_size,
+        timeout=args.timeout,
+        retries=args.retries,
+        request_interval=args.request_interval,
+        expand_step_days=args.expand_step_days,
+        max_expansions=args.max_expansions,
+    )
 
     merged_records = merge_records(all_records)
     inserted_or_updated, deleted = persist_records(
@@ -211,9 +284,15 @@ def main() -> int:
         retention_days=args.retention_days,
     )
 
+    final_window = (
+        f"{search_attempts[-1]['startDate']}..{search_attempts[-1]['endDate']}"
+        if search_attempts
+        else f"{end_day.isoformat()}..{end_day.isoformat()}"
+    )
     print(
         "arxiv metadata sync completed: "
-        f"raw={len(all_records)} unique={len(merged_records)} upserted={inserted_or_updated} deleted={deleted}",
+        f"raw={len(all_records)} unique={len(merged_records)} upserted={inserted_or_updated} "
+        f"deleted={deleted} attempts={len(search_attempts)} final_window={final_window}",
         flush=True,
     )
     return 0

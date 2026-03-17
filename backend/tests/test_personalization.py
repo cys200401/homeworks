@@ -72,6 +72,66 @@ class PersonalizationTests(unittest.TestCase):
         self.assertGreaterEqual(len(report["highlights"]), 1)
         self.assertEqual(report["sourceMeta"]["paperSource"], "database")
 
+    def test_build_personalized_report_expands_lookback_when_primary_window_is_empty(self) -> None:
+        report = build_personalized_report(
+            user={
+                "handle": "research-lead",
+                "display_name": "Research Lead",
+                "timezone": "Asia/Shanghai",
+            },
+            delivery_profile={
+                "categories_json": ["cs.IR", "cs.CV"],
+                "window_start_hour": 8,
+                "window_end_hour": 23,
+                "lookback_days": 1,
+            },
+            theme_profile={
+                "prompt_text": "",
+                "tokens_json": compile_theme_prompt(""),
+            },
+            now=datetime(2026, 3, 15, 0, 30, tzinfo=UTC),
+            paper_catalog=[
+                {
+                    "arxivId": "2603.15006v1",
+                    "title": "Structured Memory Retrieval for Multimodal Research Assistants",
+                    "authors": ["Geoffrey Hinton", "Yoshua Bengio"],
+                    "abstract": "This paper introduces a structured memory retrieval scheme for multimodal assistants.",
+                    "categories": ["cs.IR", "cs.CV", "cs.CL"],
+                    "arxivUrl": "https://arxiv.org/abs/2603.15006",
+                    "publishedAt": "2026-03-14T00:25:00Z",
+                }
+            ],
+        )
+
+        self.assertEqual(report["totalPapers"], 1)
+        self.assertTrue(report["sourceMeta"]["searchExpanded"])
+        self.assertEqual(report["sourceMeta"]["effectiveLookbackDays"], 3)
+        self.assertIn("自动扩展到 3 天", report["summary"])
+
+    def test_build_personalized_report_keeps_database_source_empty_when_catalog_is_empty(self) -> None:
+        report = build_personalized_report(
+            user={
+                "handle": "robotics",
+                "display_name": "Robotics",
+                "timezone": "UTC",
+            },
+            delivery_profile={
+                "categories_json": ["cs.RO"],
+                "window_start_hour": 0,
+                "window_end_hour": 24,
+                "lookback_days": 1,
+            },
+            theme_profile=None,
+            now=datetime(2026, 3, 15, 0, 30, tzinfo=UTC),
+            paper_catalog=[],
+        )
+
+        self.assertEqual(report["totalPapers"], 0)
+        self.assertEqual(report["sourceMeta"]["paperSource"], "database")
+        self.assertEqual(report["sourceMeta"]["selectedPaperIds"], [])
+        self.assertEqual(report["highlights"], [])
+        self.assertEqual(report["notables"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

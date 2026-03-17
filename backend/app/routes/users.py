@@ -11,10 +11,12 @@ from app.personalization import (
     build_personalized_report,
     catalog_row_to_paper,
     compile_theme_prompt,
+    compute_catalog_lookback_days,
     compute_next_run_at,
     default_delivery_profile,
     default_theme_profile,
     normalize_categories,
+    resolve_search_expansion,
 )
 from app.schemas import (
     ThemeTokens,
@@ -254,6 +256,13 @@ def _load_catalog_papers(
     lookback_days: int,
     reference_time: datetime,
 ) -> list[dict[str, Any]]:
+    expansion_step_days, max_search_expansions = resolve_search_expansion()
+    catalog_lookback_days = compute_catalog_lookback_days(
+        lookback_days,
+        expansion_step_days=expansion_step_days,
+        max_search_expansions=max_search_expansions,
+    )
+
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -270,7 +279,7 @@ def _load_catalog_papers(
             order by published_at desc
             limit 500
             """,
-            (reference_time, max(lookback_days + 1, 2)),
+            (reference_time, catalog_lookback_days),
         )
         rows = cursor.fetchall()
 
@@ -295,7 +304,7 @@ def _upsert_generated_report(
         delivery_profile=delivery,
         theme_profile=theme,
         now=generated_at,
-        paper_catalog=paper_catalog or None,
+        paper_catalog=paper_catalog,
     )
     next_run_at = compute_next_run_at(user["timezone"], delivery["delivery_local_time"], now=generated_at)
 
